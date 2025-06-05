@@ -10,6 +10,17 @@ import toast, { Toaster } from "react-hot-toast";
 import { motion } from "framer-motion";
 import Papa from "papaparse";
 
+const ABI = [
+  "function disperseEther(address[] recipients, uint256[] values) external payable",
+  "function disperseToken(address token, address[] recipients, uint256[] values) external"
+];
+
+const CONTRACTS: Record<number, string> = {
+  56: "0x41c57d044087b1834379CdFE1E09b18698eC3A5A",
+  42161: "0x06b9d57Ba635616F41E85D611b2DA58856176Fa9",
+  137: "0xD375BA042B41A61e36198eAd6666BC0330649403"
+};
+
 export default function Rainmaker() {
   const [inputText, setInputText] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
@@ -43,9 +54,50 @@ export default function Rainmaker() {
     });
   };
 
-  const handleSend = () => {
-    // simulate sending logic
-    toast.success("Transaction submitted");
+  const handleSend = async () => {
+    if (!window.ethereum) return toast.error("No wallet found");
+
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const signer = provider.getSigner();
+
+    try {
+      const network = await provider.getNetwork();
+      const chainId = network.chainId;
+
+      if (!CONTRACTS[chainId]) {
+        return toast.error("Unsupported network");
+      }
+
+      const contract = new ethers.Contract(CONTRACTS[chainId], ABI, signer);
+
+      const lines = inputText.trim().split("\n");
+      const recipients: string[] = [];
+      const amounts: ethers.BigNumber[] = [];
+      let total = ethers.BigNumber.from(0);
+
+      for (const line of lines) {
+        const [addr, amount] = line.split(",").map(s => s.trim());
+        if (!ethers.utils.isAddress(addr)) throw new Error(`Invalid address: ${addr}`);
+        const parsed = ethers.utils.parseUnits(amount, 18);
+        recipients.push(addr);
+        amounts.push(parsed);
+        total = total.add(parsed);
+      }
+
+      let tx;
+
+      if (tokenAddress && ethers.utils.isAddress(tokenAddress)) {
+        tx = await contract.disperseToken(tokenAddress, recipients, amounts);
+      } else {
+        tx = await contract.disperseEther(recipients, amounts, { value: total });
+      }
+
+      toast.success("Transaction sent: " + tx.hash);
+      await tx.wait();
+      toast.success("Transaction confirmed ✅");
+    } catch (err: any) {
+      toast.error(err.message || "Transaction failed");
+    }
   };
 
   return (
