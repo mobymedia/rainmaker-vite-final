@@ -30,6 +30,14 @@ const CHAIN_CONFIG: Record<number, { name: string; contract: string; color?: str
   },
 };
 
+const COMMON_TOKENS = [
+  { name: "USDC", address: "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" },
+  { name: "DAI", address: "0x6b175474e89094c44da98b954eedeac495271d0f" },
+  { name: "USDT", address: "0xdac17f958d2ee523a2206206994597c13d831ec7" },
+];
+
+const ERC20_ABI = ["function decimals() view returns (uint8)", "function balanceOf(address) view returns (uint256)"];
+
 const ABI = [
   "function disperseEther(address[] recipients, uint256[] values) external payable",
   "function disperseToken(address token, address[] recipients, uint256[] values) external",
@@ -37,12 +45,14 @@ const ABI = [
 
 export default function Rainmaker() {
   const [inputText, setInputText] = useState("");
-  const [tokenAddress, setTokenAddress] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
   const [status, setStatus] = useState("");
   const [chainId, setChainId] = useState<number | null>(null);
   const [theme, setTheme] = useState("light");
   const [gasEstimate, setGasEstimate] = useState<string>("");
+  const [tokenAddress, setTokenAddress] = useState<string>("");
+  const [tokenDecimals, setTokenDecimals] = useState<number>(18);
+  const [tokenBalance, setTokenBalance] = useState<string>("");
 
   useEffect(() => {
     const stored = localStorage.getItem("theme");
@@ -61,6 +71,21 @@ export default function Rainmaker() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!tokenAddress || !ethers.utils.isAddress(tokenAddress) || !walletAddress || !window.ethereum) return;
+    const fetchTokenInfo = async () => {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const token = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+      const [decimals, balance] = await Promise.all([
+        token.decimals(),
+        token.balanceOf(walletAddress),
+      ]);
+      setTokenDecimals(decimals);
+      setTokenBalance(ethers.utils.formatUnits(balance, decimals));
+    };
+    fetchTokenInfo();
+  }, [tokenAddress, walletAddress]);
+
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";
     setTheme(newTheme);
@@ -75,6 +100,44 @@ export default function Rainmaker() {
     const id = await window.ethereum.request({ method: "eth_chainId" });
     setChainId(Number(id));
   }
+
+  const parseInput = () => {
+    try {
+      const lines = inputText.split("\n").filter(Boolean);
+      const addresses: string[] = [];
+      const values: bigint[] = [];
+      for (const line of lines) {
+        const [addr, amt] = line.split(",").map((s) => s.trim());
+        if (!ethers.utils.isAddress(addr)) throw new Error(`Invalid address: ${addr}`);
+        addresses.push(addr);
+        values.push(ethers.utils.parseUnits(amt, tokenAddress ? tokenDecimals : 18));
+      }
+      return { addresses, values };
+    } catch (e: any) {
+      alert(e.message);
+      throw e;
+    }
+  };
+
+  const sendToken = async () => {
+    if (!chainId || !window.ethereum || !ethers.utils.isAddress(tokenAddress)) {
+      alert("Invalid token address");
+      return;
+    }
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const signer = provider.getSigner();
+    const contractAddress = CHAIN_CONFIG[chainId].contract;
+    const contract = new ethers.Contract(contractAddress, ABI, signer);
+    try {
+      const { addresses, values } = parseInput();
+      const tx = await contract.disperseToken(tokenAddress, addresses, values);
+      setStatus("Token transaction sent: " + tx.hash);
+      await tx.wait();
+      setStatus("Token transaction confirmed ✅");
+    } catch (e: any) {
+      setStatus("Token Error: " + (e.message || e.toString()));
+    }
+  };
 
   return (
     <>
@@ -119,6 +182,54 @@ export default function Rainmaker() {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
             />
+
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                placeholder="ERC-20 token address"
+                className="flex-grow bg-gray-700 text-white border border-gray-500 p-2 rounded-md text-sm"
+                value={tokenAddress}
+                onChange={(e) => setTokenAddress(e.target.value)}
+              />
+              <select
+                onChange={(e) => setTokenAddress(e.target.value)}
+                className="bg-gray-700 text-white border border-gray-500 p-2 rounded-md text-sm"
+              >
+                <option value="">Select Token</option>
+                {COMMON_TOKENS.map((t) => (
+                  <option key={t.address} value={t.address}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {tokenBalance && (
+              <p className="text-sm text-green-200">Your balance: {tokenBalance}</p>
+            )}
+
+            <div className="flex flex-wrap gap-4 mt-4">
+              <button
+                onClick={estimateGas}
+                className="bg-purple-500 hover:bg-purple-600 px-4 py-2 text-sm rounded-xl"
+              >
+                Estimate Gas
+              </button>
+              <button
+                onClick={sendEther}
+                className="bg-green-500 hover:bg-green-600 px-4 py-2 text-sm rounded-xl"
+              >
+                Send ETH
+              </button>
+              <button
+                onClick={sendToken}
+                className="bg-yellow-500 hover:bg-yellow-600 px-4 py-2 text-sm rounded-xl"
+              >
+                Send Token
+              </button>
+            </div>
+            {gasEstimate && <p className="mt-2 text-sm text-blue-200">Estimated Gas: {gasEstimate}</p>}
+            {status && <p className="mt-2 text-sm text-yellow-200">{status}</p>}
           </div>
         </div>
       </div>
