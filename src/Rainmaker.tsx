@@ -23,21 +23,16 @@ const CONTRACTS: Record<number, string> = {
 
 export default function Rainmaker() {
   const [inputText, setInputText] = useState("");
-  const [walletAddress, setWalletAddress] = useState("");
   const [tokenAddress, setTokenAddress] = useState("");
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const history = localStorage.getItem("rainmaker-history");
-      if (history) setInputText(history);
-    }
+    const history = localStorage.getItem("rainmaker-history");
+    if (history) setInputText(history);
   }, []);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("rainmaker-history", inputText);
-    }
+    localStorage.setItem("rainmaker-history", inputText);
   }, [inputText]);
 
   const handleCSVUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,9 +59,7 @@ export default function Rainmaker() {
       const network = await provider.getNetwork();
       const chainId = network.chainId;
 
-      if (!CONTRACTS[chainId]) {
-        return toast.error("Unsupported network");
-      }
+      if (!CONTRACTS[chainId]) return toast.error("Unsupported network");
 
       const contract = new ethers.Contract(CONTRACTS[chainId], ABI, signer);
 
@@ -104,52 +97,72 @@ export default function Rainmaker() {
     <>
       <Head>
         <title>Rainmaker – Multisend</title>
+        <link rel="icon" href="/favicon.ico" />
       </Head>
       <Toaster position="bottom-right" />
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 text-white p-8"
+        className="min-h-screen bg-gradient-to-br from-gray-950 to-blue-900 text-white p-6 md:p-12"
       >
-        <div className="max-w-2xl mx-auto">
-          <h1 className="text-4xl font-bold flex gap-2 items-center mb-6">
-            <CloudRain className="w-8 h-8" /> Rainmaker
-          </h1>
-          <textarea
-            className="w-full h-40 p-4 text-sm rounded-xl bg-gray-800 text-white mb-4"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="0xabc123...,0.1\n0xdef456...,0.25"
-          />
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleCSVUpload}
-            className="mb-4 block"
-            ref={fileInputRef}
-          />
-          <input
-            type="text"
-            placeholder="Optional token address"
-            className="w-full p-2 text-sm rounded-md bg-gray-700 mb-4"
-            value={tokenAddress}
-            onChange={(e) => setTokenAddress(e.target.value)}
-          />
-          <div className="flex gap-4">
+        <div className="max-w-3xl mx-auto bg-white/10 backdrop-blur-md rounded-3xl p-10 shadow-2xl border border-white/20">
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-4xl font-extrabold flex items-center gap-3">
+              <CloudRain className="w-9 h-9" /> Rainmaker
+            </h1>
+            <span className="text-xs bg-green-500 text-white px-3 py-1 rounded-full uppercase tracking-wide">
+              Multichain
+            </span>
+          </div>
+
+          <div className="mb-6">
+            <label className="text-sm mb-2 block font-semibold">Wallets & Amounts</label>
+            <textarea
+              className="w-full h-44 p-4 text-sm rounded-xl bg-gray-800 text-white"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="0xabc123...,0.1\n0xdef456...,0.25"
+            />
+          </div>
+
+          <div className="mb-6">
+            <label className="text-sm mb-2 block font-semibold">Token Address (optional)</label>
+            <input
+              type="text"
+              placeholder="Leave empty to send native token (ETH, MATIC, BNB...)"
+              className="w-full p-3 text-sm rounded-md bg-gray-700"
+              value={tokenAddress}
+              onChange={(e) => setTokenAddress(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-4 items-center mb-6">
             <button
               onClick={handleSend}
-              className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-xl text-sm"
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-6 py-2.5 rounded-xl text-sm font-semibold"
             >
-              Send
+              <Zap className="w-4 h-4" /> Send
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-xl text-sm"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-6 py-2.5 rounded-xl text-sm font-semibold"
             >
-              <Upload className="w-4 h-4 inline-block mr-1" /> Upload CSV
+              <Upload className="w-4 h-4" /> Upload CSV
             </button>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCSVUpload}
+              className="hidden"
+              ref={fileInputRef}
+            />
           </div>
+
+          <p className="text-xs text-white/60">
+            Paste wallet addresses and amounts above in the format: <br />
+            <code>0xabc...,0.1</code>
+          </p>
         </div>
       </motion.div>
     </>
