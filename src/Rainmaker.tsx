@@ -3,23 +3,30 @@
 
 import { useEffect, useState } from "react";
 import { ethers } from "ethers";
+import { CloudRain, Upload, Wallet, Zap } from "lucide-react";
+import Head from "next/head";
+import Image from "next/image";
 
-const CHAIN_CONFIG: Record<number, { name: string; contract: string }> = {
+const CHAIN_CONFIG: Record<number, { name: string; contract: string; color?: string }> = {
   1: {
     name: "Ethereum",
     contract: "0xD375BA042B41A61e36198eAd6666BC0330649403",
+    color: "#627eea",
   },
   56: {
     name: "BNB Chain",
     contract: "0x41c57d044087b1834379CdFE1E09b18698eC3A5A",
+    color: "#f3ba2f",
   },
   42161: {
     name: "Arbitrum",
     contract: "0x06b9d57Ba635616F41E85D611b2DA58856176Fa9",
+    color: "#28a0f0",
   },
   137: {
     name: "Polygon",
     contract: "0xD375BA042B41A61e36198eAd6666BC0330649403",
+    color: "#8247e5",
   },
 };
 
@@ -29,8 +36,7 @@ const ABI = [
 ];
 
 export default function Rainmaker() {
-  const [recipientsText, setRecipientsText] = useState("");
-  const [amountsText, setAmountsText] = useState("");
+  const [inputText, setInputText] = useState("");
   const [tokenAddress, setTokenAddress] = useState("");
   const [walletAddress, setWalletAddress] = useState("");
   const [status, setStatus] = useState("");
@@ -70,153 +76,52 @@ export default function Rainmaker() {
     setChainId(Number(id));
   }
 
-  function handleCSVUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const lines = (event.target?.result as string).split("\n");
-      const validRows = lines.map((l) => l.trim()).filter(Boolean);
-      const recipients: string[] = [];
-      const amounts: string[] = [];
-      validRows.forEach((line) => {
-        const [addr, amt] = line.split(",").map((x) => x.trim());
-        if (ethers.isAddress(addr) && !isNaN(Number(amt))) {
-          recipients.push(addr);
-          amounts.push(amt);
-        }
-      });
-      setRecipientsText(recipients.join("\n"));
-      setAmountsText(amounts.join("\n"));
-    };
-    reader.readAsText(file);
-  }
-
-  async function estimateGas() {
-    try {
-      if (!window.ethereum || !chainId || !CHAIN_CONFIG[chainId]) return;
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CHAIN_CONFIG[chainId].contract, ABI, signer);
-
-      const recipients = recipientsText.split("\n").map((line) => line.trim()).filter(Boolean);
-      const amounts = amountsText.split("\n").map((line) => ethers.parseEther(line.trim()));
-
-      let estimate;
-      if (tokenAddress) {
-        estimate = await contract.disperseToken.estimateGas(tokenAddress, recipients, amounts);
-      } else {
-        const total = amounts.reduce((acc, cur) => acc + cur, 0n);
-        estimate = await contract.disperseEther.estimateGas(recipients, amounts, { value: total });
-      }
-
-      const gasInEth = ethers.formatEther(estimate * 1000000000n); // assuming 1 gwei gas price approx
-      setGasEstimate(`Est. Gas: ~${Number(gasInEth).toFixed(6)} ETH`);
-    } catch (err) {
-      setGasEstimate("Unable to estimate gas");
-    }
-  }
-
-  async function handleDisperse() {
-    try {
-      if (!window.ethereum) throw new Error("No wallet found");
-      if (!chainId || !CHAIN_CONFIG[chainId]) throw new Error("Unsupported chain");
-
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CHAIN_CONFIG[chainId].contract, ABI, signer);
-
-      const recipients = recipientsText.split("\n").map(line => line.trim()).filter(Boolean);
-      const amounts = amountsText.split("\n").map(line => ethers.parseEther(line.trim()));
-
-      if (recipients.length !== amounts.length) throw new Error("Address and amount count mismatch");
-
-      if (tokenAddress) {
-        const tx = await contract.disperseToken(tokenAddress, recipients, amounts);
-        await tx.wait();
-        setStatus("Token dispersed successfully!");
-      } else {
-        const total = amounts.reduce((acc, cur) => acc + cur, 0n);
-        const tx = await contract.disperseEther(recipients, amounts, { value: total });
-        await tx.wait();
-        setStatus("ETH dispersed successfully!");
-      }
-    } catch (err: any) {
-      setStatus("Error: " + err.message);
-    }
-  }
-
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 py-10 px-4 sm:px-8 md:px-16 text-gray-900 dark:text-gray-100">
-      <div className="max-w-3xl mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 relative">
-        <div className="absolute top-4 right-4 flex items-center gap-4">
-          <button onClick={toggleTheme}>
-            {theme === "light" ? "🌙" : "🌞"}
-          </button>
-          {walletAddress ? (
-            <span className="text-sm">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
-          ) : (
-            <button
-              onClick={connectWallet}
-              className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
-            >
-              Connect Wallet
-            </button>
-          )}
+    <>
+      <Head>
+        <title>Rainmaker – Multisend ETH & Tokens</title>
+        <meta name="description" content="Rainmaker makes it easy to send crypto to many in one transaction." />
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 text-white">
+        <div className="max-w-3xl mx-auto p-8 pt-10">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-4xl font-bold flex items-center gap-2 text-blue-300">
+              <CloudRain className="w-8 h-8" /> Rainmaker
+            </h1>
+            <div className="flex gap-3 items-center">
+              <button onClick={toggleTheme} className="text-xl">
+                {theme === "light" ? "🌙" : "🌞"}
+              </button>
+              {walletAddress ? (
+                <span className="text-sm bg-white text-gray-900 px-3 py-1 rounded-xl">
+                  {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                </span>
+              ) : (
+                <button
+                  onClick={connectWallet}
+                  className="bg-blue-500 hover:bg-blue-600 transition px-4 py-2 text-sm rounded-xl flex items-center gap-1"
+                >
+                  <Wallet className="w-4 h-4" /> Connect Wallet
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="mb-8 text-center">
+            <p className="text-lg text-blue-100">Paste wallet addresses + amounts in one box. One per line, format: address,amount</p>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-8 shadow-lg">
+            <textarea
+              className="w-full h-40 bg-gray-800 border border-gray-600 p-3 rounded-xl mb-4 text-sm text-white"
+              placeholder="0x123...,0.1\n0xabc...,0.5"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+            />
+          </div>
         </div>
-
-        <h1 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-400">Rainmaker</h1>
-
-        {chainId && !CHAIN_CONFIG[chainId] && (
-          <p className="text-red-500 text-sm text-center mb-4">Unsupported chain. Please switch to BNB, Arbitrum, Polygon, or Ethereum.</p>
-        )}
-
-        <input type="file" accept=".csv" onChange={handleCSVUpload} className="mb-4" />
-
-        <label className="block font-medium mb-1">Recipient Addresses (one per line)</label>
-        <textarea
-          className="w-full border p-2 rounded mb-4 h-32 resize-none dark:bg-gray-700 dark:border-gray-600"
-          placeholder="0x123...\n0xabc..."
-          value={recipientsText}
-          onChange={(e) => setRecipientsText(e.target.value)}
-        />
-
-        <label className="block font-medium mb-1">Amounts (one per line, matching order)</label>
-        <textarea
-          className="w-full border p-2 rounded mb-4 h-32 resize-none dark:bg-gray-700 dark:border-gray-600"
-          placeholder="0.01\n0.5"
-          value={amountsText}
-          onChange={(e) => setAmountsText(e.target.value)}
-        />
-
-        <label className="block font-medium mb-1">Token Address (leave blank to send ETH)</label>
-        <input
-          className="w-full border p-2 rounded mb-2 dark:bg-gray-700 dark:border-gray-600"
-          placeholder="0xTOKEN..."
-          value={tokenAddress}
-          onChange={(e) => setTokenAddress(e.target.value)}
-        />
-
-        <div className="flex justify-between items-center mb-6">
-          <button
-            onClick={estimateGas}
-            className="text-sm text-blue-600 hover:underline"
-          >
-            Estimate Gas
-          </button>
-          {gasEstimate && <p className="text-sm text-gray-700 dark:text-gray-300">{gasEstimate}</p>}
-        </div>
-
-        <button
-          onClick={handleDisperse}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl"
-        >
-          Send
-        </button>
-
-        {status && <p className="text-center text-sm mt-4 text-gray-700 dark:text-gray-300">{status}</p>}
       </div>
-    </div>
+    </>
   );
 }
