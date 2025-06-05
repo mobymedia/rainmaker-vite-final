@@ -1,3 +1,4 @@
+// Rainmaker.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -5,8 +6,8 @@ import { ethers } from "ethers";
 
 const CHAIN_CONFIG: Record<number, { name: string; contract: string }> = {
   1: {
-  name: "Ethereum",
-  contract: "0xD375BA042B41A61e36198eAd6666BC0330649403",
+    name: "Ethereum",
+    contract: "0xD375BA042B41A61e36198eAd6666BC0330649403",
   },
   56: {
     name: "BNB Chain",
@@ -35,6 +36,7 @@ export default function Rainmaker() {
   const [status, setStatus] = useState("");
   const [chainId, setChainId] = useState<number | null>(null);
   const [theme, setTheme] = useState("light");
+  const [gasEstimate, setGasEstimate] = useState<string>("");
 
   useEffect(() => {
     const stored = localStorage.getItem("theme");
@@ -45,9 +47,7 @@ export default function Rainmaker() {
 
     if (window.ethereum) {
       window.ethereum.request({ method: "eth_accounts" }).then((accounts) => {
-        if (accounts.length > 0) {
-          setWalletAddress(accounts[0]);
-        }
+        if (accounts.length > 0) setWalletAddress(accounts[0]);
       });
       window.ethereum.request({ method: "eth_chainId" }).then((id: string) => {
         setChainId(Number(id));
@@ -70,6 +70,54 @@ export default function Rainmaker() {
     setChainId(Number(id));
   }
 
+  function handleCSVUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const lines = (event.target?.result as string).split("\n");
+      const validRows = lines.map((l) => l.trim()).filter(Boolean);
+      const recipients: string[] = [];
+      const amounts: string[] = [];
+      validRows.forEach((line) => {
+        const [addr, amt] = line.split(",").map((x) => x.trim());
+        if (ethers.isAddress(addr) && !isNaN(Number(amt))) {
+          recipients.push(addr);
+          amounts.push(amt);
+        }
+      });
+      setRecipientsText(recipients.join("\n"));
+      setAmountsText(amounts.join("\n"));
+    };
+    reader.readAsText(file);
+  }
+
+  async function estimateGas() {
+    try {
+      if (!window.ethereum || !chainId || !CHAIN_CONFIG[chainId]) return;
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CHAIN_CONFIG[chainId].contract, ABI, signer);
+
+      const recipients = recipientsText.split("\n").map((line) => line.trim()).filter(Boolean);
+      const amounts = amountsText.split("\n").map((line) => ethers.parseEther(line.trim()));
+
+      let estimate;
+      if (tokenAddress) {
+        estimate = await contract.disperseToken.estimateGas(tokenAddress, recipients, amounts);
+      } else {
+        const total = amounts.reduce((acc, cur) => acc + cur, 0n);
+        estimate = await contract.disperseEther.estimateGas(recipients, amounts, { value: total });
+      }
+
+      const gasInEth = ethers.formatEther(estimate * 1000000000n); // assuming 1 gwei gas price approx
+      setGasEstimate(`Est. Gas: ~${Number(gasInEth).toFixed(6)} ETH`);
+    } catch (err) {
+      setGasEstimate("Unable to estimate gas");
+    }
+  }
+
   async function handleDisperse() {
     try {
       if (!window.ethereum) throw new Error("No wallet found");
@@ -79,7 +127,7 @@ export default function Rainmaker() {
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(CHAIN_CONFIG[chainId].contract, ABI, signer);
 
-      const recipients = recipientsText.split("\n").map(line => line.trim()).filter(line => line);
+      const recipients = recipientsText.split("\n").map(line => line.trim()).filter(Boolean);
       const amounts = amountsText.split("\n").map(line => ethers.parseEther(line.trim()));
 
       if (recipients.length !== amounts.length) throw new Error("Address and amount count mismatch");
@@ -121,8 +169,10 @@ export default function Rainmaker() {
         <h1 className="text-3xl font-bold mb-6 text-center text-blue-700 dark:text-blue-400">Rainmaker</h1>
 
         {chainId && !CHAIN_CONFIG[chainId] && (
-          <p className="text-red-500 text-sm text-center mb-4">Unsupported chain. Please switch to BNB, Arbitrum, or Polygon.</p>
+          <p className="text-red-500 text-sm text-center mb-4">Unsupported chain. Please switch to BNB, Arbitrum, Polygon, or Ethereum.</p>
         )}
+
+        <input type="file" accept=".csv" onChange={handleCSVUpload} className="mb-4" />
 
         <label className="block font-medium mb-1">Recipient Addresses (one per line)</label>
         <textarea
@@ -142,11 +192,21 @@ export default function Rainmaker() {
 
         <label className="block font-medium mb-1">Token Address (leave blank to send ETH)</label>
         <input
-          className="w-full border p-2 rounded mb-6 dark:bg-gray-700 dark:border-gray-600"
+          className="w-full border p-2 rounded mb-2 dark:bg-gray-700 dark:border-gray-600"
           placeholder="0xTOKEN..."
           value={tokenAddress}
           onChange={(e) => setTokenAddress(e.target.value)}
         />
+
+        <div className="flex justify-between items-center mb-6">
+          <button
+            onClick={estimateGas}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            Estimate Gas
+          </button>
+          {gasEstimate && <p className="text-sm text-gray-700 dark:text-gray-300">{gasEstimate}</p>}
+        </div>
 
         <button
           onClick={handleDisperse}
