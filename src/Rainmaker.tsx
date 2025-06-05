@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
 const RAINMAKER_CONTRACT_ADDRESS = "0xD375BA042B41A61e36198eAd6666BC0330649403";
@@ -14,11 +14,27 @@ export default function Rainmaker() {
   const [amountsText, setAmountsText] = useState("");
   const [tokenAddress, setTokenAddress] = useState("");
   const [status, setStatus] = useState("");
+  const [walletAddress, setWalletAddress] = useState("");
+
+  async function connectWallet() {
+    if (!window.ethereum) return alert("MetaMask not found");
+    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    setWalletAddress(accounts[0]);
+  }
+
+  useEffect(() => {
+    if (window.ethereum) {
+      window.ethereum.request({ method: "eth_accounts" }).then((accounts) => {
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+        }
+      });
+    }
+  }, []);
 
   async function handleDisperse() {
     try {
       if (!window.ethereum) throw new Error("No wallet found");
-
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const contract = new ethers.Contract(RAINMAKER_CONTRACT_ADDRESS, ABI, signer);
@@ -46,6 +62,21 @@ export default function Rainmaker() {
   return (
     <div className="min-h-screen bg-gray-100 py-10 px-4 sm:px-8 md:px-16">
       <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-xl p-8">
+        <div className="mb-4 text-right">
+          {walletAddress ? (
+            <span className="text-sm text-gray-700">
+              Connected: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+            </span>
+          ) : (
+            <button
+              onClick={connectWallet}
+              className="bg-blue-500 text-white px-4 py-2 rounded-xl hover:bg-blue-600"
+            >
+              Connect Wallet
+            </button>
+          )}
+        </div>
+
         <h1 className="text-3xl font-bold mb-6 text-center text-blue-700">Rainmaker</h1>
 
         <label className="block font-medium mb-1">Recipient Addresses (one per line)</label>
@@ -76,7 +107,8 @@ export default function Rainmaker() {
           onClick={handleDisperse}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl"
         >
-          Send</button>
+          Send
+        </button>
 
         {status && <p className="text-center text-sm mt-4 text-gray-700">{status}</p>}
       </div>
