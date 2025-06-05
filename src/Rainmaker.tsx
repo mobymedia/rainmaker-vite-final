@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { ethers } from "ethers";
 
 const CHAIN_CONFIG: Record<number, { name: string; contract: string }> = {
+  1: {
+  name: "Ethereum",
+  contract: "0xD375BA042B41A61e36198eAd6666BC0330649403",
+  },
   56: {
     name: "BNB Chain",
     contract: "0x41c57d044087b1834379CdFE1E09b18698eC3A5A",
